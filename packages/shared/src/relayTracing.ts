@@ -124,11 +124,14 @@ function nonInterferingTracer(delegate: Tracer.Tracer): Tracer.Tracer {
   });
 }
 
+const FORK_DISABLE_RELAY_TRACING = true;
+
 export function layer(
   config: RelayClientTracingConfig | null,
   resource: RelayClientTracingResource,
 ): Layer.Layer<never, never, HttpClient.HttpClient> {
-  if (config === null) {
+  // Fork: relay tracing is off for good.
+  if (FORK_DISABLE_RELAY_TRACING || config === null) {
     return Layer.succeed(RelayClientTracer, Option.none());
   }
 
