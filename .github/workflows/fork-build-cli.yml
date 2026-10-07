@@ -1,11 +1,18 @@
 name: Fork CLI Build
 
-# Headless `t3` server archive for macOS arm64, built for this fork: PostHog,
+# Headless `t3` server archives for Apple Silicon and Intel Macs: PostHog,
 # OTLP export, and relay tracing are patched out, and there is no .env, so T3
 # Connect stays off. The build fails if PostHog or Axiom endpoints show up.
 
 on:
   workflow_dispatch:
+    inputs:
+      arch:
+        description: macOS CPU architecture
+        type: choice
+        options: [arm64, x64]
+        default: arm64
+        required: true
 
 permissions:
   contents: write
@@ -16,7 +23,10 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: ${{ inputs.arch == 'x64' && 'macos-15-intel' || 'macos-15' }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+      CLI_ARCH: ${{ inputs.arch }}
     timeout-minutes: 90
     steps:
       # Upstream's checkout: skip the vendored .repos tree, whose orphaned
@@ -70,8 +80,8 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml
-          mkdir -p "$RUNNER_TEMP/cli-resource-monitor/darwin-arm64"
-          cp native/resource-monitor/target/release/t3-resource-monitor "$RUNNER_TEMP/cli-resource-monitor/darwin-arm64/"
+          mkdir -p "$RUNNER_TEMP/cli-resource-monitor/darwin-$CLI_ARCH"
+          cp native/resource-monitor/target/release/t3-resource-monitor "$RUNNER_TEMP/cli-resource-monitor/darwin-$CLI_ARCH/"
 
       # Keep in step with SEA_NODE_VERSION in apps/server/vite.config.ts.
       - name: Build CLI single-executable
@@ -82,7 +92,7 @@ jobs:
       - name: Build CLI archive
         run: |
           node scripts/build-cli-archive.ts \
-            --platform mac --arch arm64 \
+            --platform mac --arch "$CLI_ARCH" \
             --version "${{ steps.version.outputs.version }}" \
             --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" \
             --output-dir release-cli
@@ -106,5 +116,6 @@ jobs:
           gh release create "v${VERSION}" release-cli/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
+            --latest="${{ inputs.arch == 'x64' && 'false' || 'true' }}" \
             --title "t3 ${VERSION} (no telemetry)" \
-            --notes "Headless t3 server for macOS arm64, built from ${GITHUB_SHA}. PostHog, OTLP export, relay tracing, and T3 Connect are off."
+            --notes "Headless t3 server for macOS $CLI_ARCH, built from ${GITHUB_SHA}. PostHog, OTLP export, relay tracing, and T3 Connect are off."
