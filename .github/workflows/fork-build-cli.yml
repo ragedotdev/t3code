@@ -97,6 +97,23 @@ jobs:
             --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" \
             --output-dir release-cli
 
+      # The Node 26 single-executable crashes on Intel even on the CI host.
+      # Keep native dependency staging, but use a regular Node 24 runtime.
+      - name: Package compatible Intel runtime
+        if: inputs.arch == 'x64'
+        run: |
+          set -euo pipefail
+          runtime_dir="$RUNNER_TEMP/intel-node"
+          mkdir -p "$runtime_dir"
+          curl -fsSL https://nodejs.org/dist/v24.13.1/node-v24.13.1-darwin-x64.tar.gz -o "$runtime_dir/node-v24.13.1-darwin-x64.tar.gz"
+          curl -fsSL https://nodejs.org/dist/v24.13.1/SHASUMS256.txt -o "$runtime_dir/SHASUMS256.txt"
+          (cd "$runtime_dir" && shasum -a 256 -c SHASUMS256.txt --ignore-missing)
+          tar -xzf "$runtime_dir/node-v24.13.1-darwin-x64.tar.gz" -C "$runtime_dir"
+          python3 scripts/fork/repack-intel-cli.py \
+            --archive release-cli/*.tar.gz \
+            --server-dist apps/server/dist \
+            --node "$runtime_dir/node-v24.13.1-darwin-x64/bin/node"
+
       - name: Smoke-test CLI archive
         run: node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ steps.version.outputs.version }}"
 
