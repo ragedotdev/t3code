@@ -257,30 +257,16 @@ describe("OtelEnvironment", () => {
     });
     it.each([
       {
-        name: "T3CODE_OTLP_*_URL wins over a signal the OTEL variables turned off",
+        name: "the fork blocks an explicit T3 endpoint even when OTEL enables export",
         otel: withLogs(OtelEnvironment.OtelSignal.Off()),
         t3Url: "http://t3:4318/v1/logs",
-        expected: {
-          url: "http://t3:4318/v1/logs",
-          export: t3Export,
-          source: "environment" as const,
-          variable: "T3CODE_OTLP_LOGS_URL",
-        },
+        expected: undefined,
       },
       {
-        name: "an OTEL endpoint brings its headers and protocol over the fallback",
+        name: "the fork blocks OTEL endpoints and fallback endpoints",
         otel: withLogs(otelExport),
         t3Url: " ",
-        expected: {
-          url: "http://otel:4318/v1/logs",
-          export: {
-            protocol: "http/protobuf" as const,
-            headers: { "x-key": "otel" },
-            exportIntervalMs: 5_000,
-          },
-          source: "environment" as const,
-          variable: "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-        },
+        expected: undefined,
       },
       {
         name: "a signal the OTEL variables turned off does not fall through",
@@ -351,8 +337,8 @@ describe("OtelEnvironment", () => {
         OtelEnvironment.resolveSignalEndpoint(otel, "traces", t3, {
           bootstrapUrl: undefined,
           settingsUrl: "http://settings:4318/v1/traces",
-        })?.url,
-        "http://settings:4318/v1/traces",
+        }),
+        undefined,
       );
     }),
   );

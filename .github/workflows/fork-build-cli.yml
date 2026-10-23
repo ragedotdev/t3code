@@ -55,8 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -f .env
-          base="$(node -p "require('./apps/server/package.json').version")"
-          version="${base}-fork.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          version="$(node -p "require('./fork-release.json').version")"
           node scripts/update-release-package-versions.ts "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -73,10 +72,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/cli-resource-monitor/darwin-arm64"
           cp native/resource-monitor/target/release/t3-resource-monitor "$RUNNER_TEMP/cli-resource-monitor/darwin-arm64/"
 
-      # Keep in step with SEA_NODE_VERSION in apps/server/vite.config.ts.
       - name: Build CLI single-executable
-        env:
-          VP_NODE_VERSION: "26.8.2"
         run: node apps/server/scripts/cli.ts build-exe --verbose
 
       - name: Build CLI archive
