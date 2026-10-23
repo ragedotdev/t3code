@@ -1,11 +1,22 @@
 name: Fork CLI Build
 
-# Headless `t3` server archive for macOS arm64, built for this fork: PostHog,
+# Headless `t3` server archives for Apple Silicon and Intel Macs: PostHog,
 # OTLP export, and relay tracing are patched out, and there is no .env, so T3
 # Connect stays off. The build fails if PostHog or Axiom endpoints show up.
 
 on:
   workflow_dispatch:
+    inputs:
+      arch:
+        description: macOS CPU architecture
+        type: choice
+        options: [arm64, x64]
+        default: arm64
+        required: true
+      source_ref:
+        description: Optional immutable source tag to build
+        type: string
+        required: false
 
 permissions:
   contents: write
@@ -16,7 +27,10 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: ${{ inputs.arch == 'x64' && 'macos-15-intel' || 'macos-15' }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.5"
+      CLI_ARCH: ${{ inputs.arch }}
     timeout-minutes: 90
     steps:
       # Upstream's checkout: skip the vendored .repos tree, whose orphaned
@@ -24,6 +38,7 @@ jobs:
       - name: Checkout
         env:
           GIT_TERMINAL_PROMPT: "0"
+          SOURCE_REF: ${{ inputs.source_ref }}
         run: |
           set -euo pipefail
           git init .
@@ -31,6 +46,12 @@ jobs:
           git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git sparse-checkout set --no-cone '/*' '!/.repos/'
           git checkout --detach FETCH_HEAD
+          cp scripts/fork/repack-intel-cli.py "$RUNNER_TEMP/repack-intel-cli.py"
+          if [[ -n "$SOURCE_REF" ]]; then
+            git fetch --no-tags --depth=1 origin "$SOURCE_REF"
+            git checkout --detach FETCH_HEAD
+          fi
+          echo "BUILD_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Check source for telemetry
         run: scripts/fork/check-no-telemetry.sh
@@ -69,8 +90,8 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml
-          mkdir -p "$RUNNER_TEMP/cli-resource-monitor/darwin-arm64"
-          cp native/resource-monitor/target/release/t3-resource-monitor "$RUNNER_TEMP/cli-resource-monitor/darwin-arm64/"
+          mkdir -p "$RUNNER_TEMP/cli-resource-monitor/darwin-$CLI_ARCH"
+          cp native/resource-monitor/target/release/t3-resource-monitor "$RUNNER_TEMP/cli-resource-monitor/darwin-$CLI_ARCH/"
 
       - name: Build CLI single-executable
         run: node apps/server/scripts/cli.ts build-exe --verbose
@@ -78,10 +99,28 @@ jobs:
       - name: Build CLI archive
         run: |
           node scripts/build-cli-archive.ts \
-            --platform mac --arch arm64 \
+            --platform mac --arch "$CLI_ARCH" \
             --version "${{ steps.version.outputs.version }}" \
             --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" \
             --output-dir release-cli
+
+      # Intel Macs use regular Node; Node's macOS x64 SEA crashes on startup.
+      - name: Package compatible Intel runtime
+        if: inputs.arch == 'x64'
+        run: |
+          set -euo pipefail
+          node_version="$(node -p "require('./package.json').engines.node")"
+          runtime_dir="$RUNNER_TEMP/intel-node"
+          mkdir -p "$runtime_dir"
+          archive="node-v${node_version}-darwin-x64.tar.gz"
+          curl -fsSL "https://nodejs.org/dist/v${node_version}/${archive}" -o "$runtime_dir/$archive"
+          curl -fsSL "https://nodejs.org/dist/v${node_version}/SHASUMS256.txt" -o "$runtime_dir/SHASUMS256.txt"
+          (cd "$runtime_dir" && shasum -a 256 -c SHASUMS256.txt --ignore-missing)
+          tar -xzf "$runtime_dir/$archive" -C "$runtime_dir"
+          python3 "$RUNNER_TEMP/repack-intel-cli.py" \
+            --archive release-cli/*.tar.gz \
+            --server-dist apps/server/dist \
+            --node "$runtime_dir/node-v${node_version}-darwin-x64/bin/node"
 
       - name: Smoke-test CLI archive
         run: node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ steps.version.outputs.version }}"
@@ -99,8 +138,12 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "v${VERSION}" release-cli/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "t3 ${VERSION} (no telemetry)" \
-            --notes "Headless t3 server for macOS arm64, built from ${GITHUB_SHA}. PostHog, OTLP export, relay tracing, and T3 Connect are off."
+          if gh release view "v${VERSION}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "v${VERSION}" release-cli/* --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "v${VERSION}" release-cli/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$BUILD_SOURCE_SHA" \
+              --title "t3 ${VERSION} (no telemetry)" \
+              --notes "Headless t3 server for macOS $CLI_ARCH, built from ${BUILD_SOURCE_SHA}. PostHog, OTLP export, relay tracing, and T3 Connect are off."
+          fi
