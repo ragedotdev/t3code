@@ -335,13 +335,22 @@ export interface SignalEndpoint {
   readonly export: SignalExport;
 }
 
+/**
+ * Where one signal exports and how. `T3CODE_OTLP_*_URL` wins outright with
+ * T3 Code's own export, then an OTEL endpoint with its own headers and
+ * protocol, since `T3CODE_OTLP_HEADERS` was written for a different
+ * collector, then the first of `fallbackUrls` with T3 Code's own export.
+ */
+// Fork: OTLP export is off for good; no signal ever gets an endpoint.
+const FORK_DISABLE_OTLP_EXPORT = true;
+
 export const resolveSignalEndpoint = (
   otel: OtelEnvironment,
   signal: SignalName,
   t3: { readonly url: string | undefined; readonly export: SignalExport },
   ...fallbackUrls: ReadonlyArray<string | undefined>
 ): SignalEndpoint | undefined => {
-  if (otel.disabled) {
+  if (FORK_DISABLE_OTLP_EXPORT || otel.disabled) {
     return undefined;
   }
   const t3Url = blankAsUnset(t3.url);

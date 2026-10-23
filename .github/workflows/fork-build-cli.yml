@@ -1,0 +1,110 @@
+name: Fork CLI Build
+
+# Headless `t3` server archive for macOS arm64, built for this fork: PostHog,
+# OTLP export, and relay tracing are patched out, and there is no .env, so T3
+# Connect stays off. The build fails if PostHog or Axiom endpoints show up.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-build-cli
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      # Upstream's checkout: skip the vendored .repos tree, whose orphaned
+      # gitlinks break actions/checkout's cleanup.
+      - name: Checkout
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
+
+      - name: Check source for telemetry
+        run: scripts/fork/check-no-telemetry.sh
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: false
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+
+      - name: Install dependencies
+        run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
+
+      - name: Set version
+        id: version
+        run: |
+          set -euo pipefail
+          rm -f .env
+          base="$(node -p "require('./apps/server/package.json').version")"
+          version="${base}-fork.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          node scripts/update-release-package-versions.ts "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build JS bundle
+        run: vp run build:desktop
+
+      - name: Check bundle for telemetry
+        run: scripts/fork/check-no-telemetry.sh apps/server/dist
+
+      - name: Build resource monitor
+        run: |
+          set -euo pipefail
+          cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml
+          mkdir -p "$RUNNER_TEMP/cli-resource-monitor/darwin-arm64"
+          cp native/resource-monitor/target/release/t3-resource-monitor "$RUNNER_TEMP/cli-resource-monitor/darwin-arm64/"
+
+      # Keep in step with SEA_NODE_VERSION in apps/server/vite.config.ts.
+      - name: Build CLI single-executable
+        env:
+          VP_NODE_VERSION: "26.8.2"
+        run: node apps/server/scripts/cli.ts build-exe --verbose
+
+      - name: Build CLI archive
+        run: |
+          node scripts/build-cli-archive.ts \
+            --platform mac --arch arm64 \
+            --version "${{ steps.version.outputs.version }}" \
+            --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" \
+            --output-dir release-cli
+
+      - name: Smoke-test CLI archive
+        run: node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ steps.version.outputs.version }}"
+
+      - name: Check archive for telemetry
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/archive-check"
+          tar -xzf release-cli/*.tar.gz -C "$RUNNER_TEMP/archive-check"
+          scripts/fork/check-no-telemetry.sh "$RUNNER_TEMP/archive-check"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "v${VERSION}" release-cli/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "t3 ${VERSION} (no telemetry)" \
+            --notes "Headless t3 server for macOS arm64, built from ${GITHUB_SHA}. PostHog, OTLP export, relay tracing, and T3 Connect are off."
