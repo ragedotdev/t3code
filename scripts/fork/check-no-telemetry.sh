@@ -4,7 +4,7 @@
 #        check-no-telemetry.sh path ...   scan build output, everything included
 set -euo pipefail
 
-pattern='posthog\.com|phc_[A-Za-z0-9]{20,}|axiom\.co'
+pattern='ingest\.t3\.codes|posthog\.com|phc_[A-Za-z0-9]{20,}|axiom\.co'
 
 if [[ $# -eq 0 ]]; then
   hits="$(grep -rEal "$pattern" apps packages \

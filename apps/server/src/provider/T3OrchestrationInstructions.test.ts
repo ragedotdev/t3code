@@ -23,9 +23,7 @@ describe("T3 orchestration provider instructions", () => {
 
   it("routes unattended continuation through app-owned async delegation in provider prompts", () => {
     const prompts = [
-      Object.entries(
-        buildCodexAdditionalContext({ model: "gpt-6.1-sol", reasoningEffort: "high" }),
-      )
+      Object.entries(buildCodexAdditionalContext({ model: "gpt-6.1-sol", reasoningEffort: "high" }))
         .filter(([key]) => key.startsWith("t3_code_orchestration_"))
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([, entry]) => entry.value)
