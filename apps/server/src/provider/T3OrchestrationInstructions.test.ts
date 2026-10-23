@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 
+import { buildCodexAdditionalContext } from "./CodexDeveloperInstructions.ts";
 import {
   T3_CODE_ORCHESTRATION_INSTRUCTIONS,
   t3AcpPromptWithInstructions,
@@ -18,6 +19,38 @@ describe("T3 orchestration provider instructions", () => {
       T3_CODE_ORCHESTRATION_INSTRUCTIONS,
       "Do not use `t3_thread_send` on `childThreadId`",
     );
+  });
+
+  it("routes unattended continuation through app-owned async delegation in provider prompts", () => {
+    const prompts = [
+      buildCodexAdditionalContext({ model: "gpt-6.1-sol", reasoningEffort: "high" })
+        .t3_code_orchestration!.value,
+      t3OrchestrationSystemPrompt(true)!,
+      t3OrchestrationPromptForFirstRun({
+        prompt: "Delegate the implementation and continue when it finishes.",
+        runOrdinal: 1,
+        hasT3Mcp: true,
+      }),
+      t3AcpPromptWithInstructions({
+        prompt: "Delegate the implementation and continue when it finishes.",
+        state: { interactionMode: "default", hasT3Mcp: true },
+      }),
+    ];
+
+    for (const prompt of prompts) {
+      assert.include(
+        prompt,
+        'use `delegate_task` with `mode: "async"`, including for same-provider work',
+      );
+      assert.include(prompt, "the parent will remain active to consume their results");
+      assert.include(prompt, "without starting another parent turn");
+      assert.include(prompt, "Do not promise automatic resumption from native subagent completion");
+      assert.include(
+        prompt,
+        "Do not use `codex queue` to send direct input to an unloaded spawned subagent",
+      );
+      assert.include(prompt, "Honor explicit pauses and cancellations");
+    }
   });
 
   it("documents structured schedules instead of JSON strings", () => {
