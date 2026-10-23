@@ -83,3 +83,16 @@ describe("T3 device instructions", () => {
     assert.notInclude(t3AcpPromptWithInstructions({ prompt: "Hi.", state }), "## T3 Code devices");
   });
 });
+
+describe("T3 orchestration instructions", () => {
+  it("route unattended continuation through async delegation", () => {
+    assert.include(
+      T3_CODE_ORCHESTRATION_INSTRUCTIONS,
+      'To end your turn and resume when a child finishes, use `delegate_task` with `mode: "async"`',
+    );
+    assert.include(
+      T3_CODE_ORCHESTRATION_INSTRUCTIONS,
+      "A native subagent finishing does not start a new turn here",
+    );
+  });
+});
