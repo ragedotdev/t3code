@@ -194,7 +194,7 @@ export const make = Effect.gen(function* () {
   const sendBatch = Effect.fn("AnalyticsService.sendBatch")(function* (
     events: ReadonlyArray<BufferedAnalyticsEvent>,
   ) {
-    if (!isTelemetryActive || !identifier) return;
+    if (!isTelemetryActive || !distinctId) return;
 
     const payload = {
       api_key: telemetryConfig.posthogKey,
@@ -287,7 +287,7 @@ export const make = Effect.gen(function* () {
 
   const record: AnalyticsService["Service"]["record"] = Effect.fn("AnalyticsService.record")(
     function* (event, properties) {
-      if (!isTelemetryActive || !identifier) return;
+      if (!isTelemetryActive || !distinctId) return;
 
       // Telemetry is best effort: an event without a uuid is not sent. The
       // Node implementation throws (a defect) rather than failing, so catch both.
