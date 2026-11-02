@@ -275,36 +275,24 @@ describe("OtelEnvironment", () => {
         expected: undefined,
       },
       {
-        name: "an unset signal takes the first non-blank fallback",
+        name: "the fork blocks the Settings fallback",
         otel: withLogs(OtelEnvironment.OtelSignal.Unset()),
         t3Url: undefined,
-        expected: {
-          url: "http://settings:4318/v1/logs",
-          export: t3Export,
-          source: "settings" as const,
-        },
+        expected: undefined,
       },
       {
-        name: "a desktop bootstrap URL that differs from the setting wins as the desktop's own",
+        name: "the fork blocks a desktop bootstrap URL",
         otel: withLogs(OtelEnvironment.OtelSignal.Unset()),
         t3Url: undefined,
         bootstrapUrl: "http://desktop:4318/v1/logs",
-        expected: {
-          url: "http://desktop:4318/v1/logs",
-          export: t3Export,
-          source: "bootstrap" as const,
-        },
+        expected: undefined,
       },
       {
-        name: "a desktop bootstrap URL that forwards the setting counts as the setting",
+        name: "the fork blocks a desktop bootstrap URL that forwards the setting",
         otel: withLogs(OtelEnvironment.OtelSignal.Unset()),
         t3Url: undefined,
         bootstrapUrl: " http://settings:4318/v1/logs ",
-        expected: {
-          url: "http://settings:4318/v1/logs",
-          export: t3Export,
-          source: "settings" as const,
-        },
+        expected: undefined,
       },
     ])("$name", ({ otel, t3Url, bootstrapUrl = "", expected }) => {
       assert.deepStrictEqual(
