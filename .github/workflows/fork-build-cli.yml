@@ -1,8 +1,9 @@
 name: Fork CLI Build
 
 # Headless `t3` server archives for Apple Silicon and Intel Macs: PostHog,
-# OTLP export, and relay tracing are patched out, and there is no .env, so T3
-# Connect stays off. The build fails if PostHog or Axiom endpoints show up.
+# OTLP export, relay tracing, and Cursor SDK analytics are patched out, and
+# there is no .env, so T3 Connect stays off. The build fails if PostHog or Axiom
+# endpoints show up or the Cursor SDK patch is missing.
 
 on:
   workflow_dispatch:
@@ -71,6 +72,9 @@ jobs:
       - name: Install dependencies
         run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
 
+      - name: Check Cursor SDK analytics are patched out
+        run: python3 scripts/fork/strip-cursor-sdk-telemetry.py --check "$(readlink -f packages/provider-cursor/node_modules/@cursor/sdk)"
+
       - name: Set version
         id: version
         run: |
@@ -131,6 +135,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/archive-check"
           tar -xzf release-cli/*.tar.gz -C "$RUNNER_TEMP/archive-check"
           scripts/fork/check-no-telemetry.sh "$RUNNER_TEMP/archive-check"
+          python3 scripts/fork/strip-cursor-sdk-telemetry.py --check "$RUNNER_TEMP"/archive-check/*/node_modules/@cursor/sdk
 
       - name: Publish release
         env:
