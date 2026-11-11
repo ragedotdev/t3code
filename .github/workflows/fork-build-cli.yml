@@ -28,8 +28,8 @@ concurrency:
 
 jobs:
   build:
-    # Fork: arm64 uses macos-14; macos-15 arm64 runners kept failing to be acquired.
-    runs-on: ${{ inputs.arch == 'x64' && 'macos-15-intel' || 'macos-14' }}
+    # Fork: arm64 uses macos-26; macos-15 arm64 jobs kept going unacquired and macos-14 is retired.
+    runs-on: ${{ inputs.arch == 'x64' && 'macos-15-intel' || 'macos-26' }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "13.5"
       CLI_ARCH: ${{ inputs.arch }}
