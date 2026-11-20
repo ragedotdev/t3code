@@ -1,5 +1,5 @@
 {
-  "version": "0.1.10-fork.20261111.1",
-  "upstreamTag": "v0.1.10-nightly.20261111.4529",
-  "upstreamCommit": "d2c25950b4d9183ea342d5d5fc14c326b9e0172a"
+  "version": "0.1.11-fork.20261120.1",
+  "upstreamTag": "v0.1.11",
+  "upstreamCommit": "59651c1761f6c63e9b6056839067066968e6a406"
 }
